@@ -1,0 +1,262 @@
+{% extends "base.html" %}
+{% block title %}AI Log & Bottleneck Analyzer — CloudMind AI{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30 mb-2">
+                <i data-lucide="cpu" class="w-3.5 h-3.5"></i>
+                AIOps Diagnostic & AWS Auto-Scaling Advisor
+            </span>
+            <h1 class="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+                AI Server Log & Resource Bottleneck Analyzer
+            </h1>
+            <p class="text-sm text-slate-400 mt-1">
+                Paste Ubuntu/Apache2 logs, upload a <code class="font-mono text-slate-300">.log</code> file, or load a live crash scenario below. Results are automatically persisted in <code class="font-mono text-emerald-300">cloud.db</code>.
+            </p>
+        </div>
+    </div>
+</div>
+
+<!-- 1-Click Scenario Presets -->
+<div class="glass-card rounded-2xl p-4 sm:p-5 mb-6">
+    <div class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">
+        <i data-lucide="zap" class="w-4 h-4 text-amber-400"></i>
+        <span>1-Click Cloud Incident Scenarios (Instant Demo Presets)</span>
+    </div>
+    <div class="flex flex-wrap gap-2">
+        {% for key, sc in scenarios.items() %}
+        <button type="button"
+                onclick="loadScenario('{{ key }}')"
+                class="px-3 py-1.5 rounded-xl text-xs font-medium bg-slate-800/90 hover:bg-indigo-600/30 hover:border-indigo-500/60 text-slate-200 border border-slate-700 transition inline-flex items-center gap-1.5">
+            <i data-lucide="terminal-square" class="w-3.5 h-3.5 text-amber-400"></i>
+            <span>{{ sc.title }}</span>
+        </button>
+        {% endfor %}
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+    <!-- Left Column: Input Telemetry & Log Form -->
+    <div class="lg:col-span-6 glass-card rounded-2xl p-5 sm:p-6">
+        <h2 class="text-base font-bold text-white flex items-center gap-2 mb-4">
+            <i data-lucide="sliders-horizontal" class="w-4 h-4 text-indigo-400"></i>
+            <span>Server Telemetry & Log Input</span>
+        </h2>
+
+        <form method="POST" action="{{ url_for('analyzer') }}" enctype="multipart/form-data" class="space-y-4">
+            <!-- Target Server Node -->
+            <div>
+                <label class="block text-xs font-semibold text-slate-300 mb-1.5">Target Cloud VM / Instance</label>
+                <select name="server_node" id="serverNodeInput"
+                        class="w-full rounded-xl bg-slate-900 border border-slate-700 px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500">
+                    <option value="VM1 — Server (server)" {% if form_data.server_node == 'VM1 — Server (server)' %}selected{% endif %}>VM1 — Server (Apache2 + SQLite3 + NFS)</option>
+                    <option value="VM2 — Client (client)" {% if form_data.server_node == 'VM2 — Client (client)' %}selected{% endif %}>VM2 — Client (Client Apps + NFS Mount)</option>
+                    <option value="VM3 — Worker (worker)" {% if form_data.server_node == 'VM3 — Worker (worker)' %}selected{% endif %}>VM3 — Worker (AI Batch Processing)</option>
+                    <option value="AWS-EC2-Public-Gateway" {% if form_data.server_node == 'AWS-EC2-Public-Gateway' %}selected{% endif %}>AWS-EC2-Public-Gateway (Ubuntu 24.04 LTS)</option>
+                </select>
+            </div>
+
+            <!-- Resource Sliders -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-slate-950/60 p-4 rounded-xl border border-slate-800">
+                <div>
+                    <div class="flex justify-between text-xs mb-1">
+                        <span class="text-slate-400 font-medium">CPU Load</span>
+                        <span id="cpuLabel" class="font-mono font-bold text-sky-400">{{ form_data.cpu_pct }}%</span>
+                    </div>
+                    <input type="range" name="cpu_pct" id="cpuSlider" min="1" max="100" value="{{ form_data.cpu_pct }}"
+                           oninput="document.getElementById('cpuLabel').textContent = this.value + '%'"
+                           class="w-full accent-sky-500 cursor-pointer" />
+                </div>
+
+                <div>
+                    <div class="flex justify-between text-xs mb-1">
+                        <span class="text-slate-400 font-medium">RAM Usage</span>
+                        <span id="ramLabel" class="font-mono font-bold text-indigo-400">{{ form_data.ram_pct }}%</span>
+                    </div>
+                    <input type="range" name="ram_pct" id="ramSlider" min="1" max="100" value="{{ form_data.ram_pct }}"
+                           oninput="document.getElementById('ramLabel').textContent = this.value + '%'"
+                           class="w-full accent-indigo-500 cursor-pointer" />
+                </div>
+
+                <div>
+                    <div class="flex justify-between text-xs mb-1">
+                        <span class="text-slate-400 font-medium">EBS Disk</span>
+                        <span id="diskLabel" class="font-mono font-bold text-emerald-400">{{ form_data.disk_pct }}%</span>
+                    </div>
+                    <input type="range" name="disk_pct" id="diskSlider" min="1" max="100" value="{{ form_data.disk_pct }}"
+                           oninput="document.getElementById('diskLabel').textContent = this.value + '%'"
+                           class="w-full accent-emerald-500 cursor-pointer" />
+                </div>
+            </div>
+
+            <!-- Log Snippet Textarea -->
+            <div>
+                <div class="flex items-center justify-between mb-1.5">
+                    <label class="text-xs font-semibold text-slate-300">Ubuntu Syslog / Apache2 Error Log Snippet</label>
+                    <button type="button" onclick="document.getElementById('logTextarea').value=''" class="text-[11px] text-slate-400 hover:text-white">Clear</button>
+                </div>
+                <textarea name="log_snippet" id="logTextarea" rows="6"
+                          placeholder="Paste /var/log/syslog, /var/log/apache2/error.log, or SQLite/NFS error output here..."
+                          class="w-full rounded-xl bg-slate-950 border border-slate-700 p-3.5 font-mono text-xs text-emerald-300 placeholder-slate-600 focus:outline-none focus:border-indigo-500">{{ form_data.log_snippet }}</textarea>
+            </div>
+
+            <!-- Optional Log File Upload & Optional Gemini API Key -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-[11px] font-semibold text-slate-400 mb-1">Or Upload <code class="font-mono">.log / .txt</code> File</label>
+                    <input type="file" name="log_file" accept=".log,.txt,.csv"
+                           class="w-full text-xs text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700" />
+                </div>
+                <div>
+                    <label class="block text-[11px] font-semibold text-slate-400 mb-1">Optional Gemini API Key (Uses ML Fallback if blank)</label>
+                    <input type="password" name="api_key" placeholder="AIzaSy... (optional)"
+                           class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-1.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500" />
+                </div>
+            </div>
+
+            <button type="submit"
+                    class="w-full py-3 px-5 rounded-xl font-bold text-sm bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 shadow-lg shadow-orange-500/20 transition flex items-center justify-center gap-2">
+                <i data-lucide="sparkles" class="w-4 h-4"></i>
+                <span>Analyze with CloudMind AI & Save to SQLite3</span>
+            </button>
+        </form>
+    </div>
+
+    <!-- Right Column: AI Diagnosis Output -->
+    <div class="lg:col-span-6">
+        {% if result %}
+        <div class="glass-card rounded-2xl p-5 sm:p-6 border-2
+            {% if result.severity == 'Critical' %}border-rose-500/50
+            {% elif result.severity == 'Medium' %}border-amber-500/50
+            {% else %}border-emerald-500/50{% endif %}">
+
+            <div class="flex flex-wrap items-center justify-between gap-2 pb-4 border-b border-slate-800">
+                <div>
+                    <span class="text-xs font-mono text-slate-400">SQLite3 Record #{{ result.id }} • {{ result.created_at }}</span>
+                    <h2 class="text-lg font-extrabold text-white mt-0.5">{{ result.server_node }}</h2>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide border
+                        {% if result.severity == 'Critical' %}bg-rose-500/20 text-rose-300 border-rose-500/40
+                        {% elif result.severity == 'Medium' %}bg-amber-500/20 text-amber-300 border-amber-500/40
+                        {% else %}bg-emerald-500/20 text-emerald-300 border-emerald-500/40{% endif %}">
+                        {{ result.severity }} Severity
+                    </span>
+                    <span class="px-3 py-1 rounded-full text-xs font-mono font-bold bg-slate-900 border border-slate-700 text-white">
+                        Score: {{ result.anomaly_score }}/100
+                    </span>
+                </div>
+            </div>
+
+            <div class="mt-4 space-y-4 text-sm">
+                <div class="flex items-center justify-between text-xs bg-slate-950/70 px-3.5 py-2 rounded-lg border border-slate-800">
+                    <span class="text-slate-400">AI Engine Used:</span>
+                    <span class="font-mono font-semibold text-indigo-300">{{ result.ai_engine_used }}</span>
+                </div>
+
+                <div class="bg-slate-900/70 rounded-xl p-4 border border-slate-800">
+                    <h3 class="text-xs font-bold uppercase tracking-wider text-amber-400 mb-1 flex items-center gap-1.5">
+                        <i data-lucide="stethoscope" class="w-4 h-4"></i>
+                        <span>AI Diagnostic Summary</span>
+                    </h3>
+                    <p class="text-slate-200 leading-relaxed">{{ result.diagnosis }}</p>
+                </div>
+
+                <div class="bg-slate-900/70 rounded-xl p-4 border border-slate-800">
+                    <h3 class="text-xs font-bold uppercase tracking-wider text-rose-400 mb-1 flex items-center gap-1.5">
+                        <i data-lucide="search-code" class="w-4 h-4"></i>
+                        <span>Root Cause Analysis</span>
+                    </h3>
+                    <p class="text-slate-300 leading-relaxed">{{ result.root_cause }}</p>
+                </div>
+
+                <div class="bg-indigo-950/30 rounded-xl p-4 border border-indigo-500/30">
+                    <h3 class="text-xs font-bold uppercase tracking-wider text-indigo-300 mb-1 flex items-center gap-1.5">
+                        <i data-lucide="cloud-lightning" class="w-4 h-4"></i>
+                        <span>Recommended AWS Cloud Scaling Action</span>
+                    </h3>
+                    <p class="text-indigo-100 leading-relaxed">{{ result.aws_scaling_recommendation }}</p>
+                </div>
+
+                <!-- Ready-to-run Ubuntu Linux Remediation Commands -->
+                <div class="bg-slate-950 rounded-xl p-4 border border-slate-800">
+                    <div class="flex items-center justify-between mb-2.5">
+                        <h3 class="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+                            <i data-lucide="terminal" class="w-4 h-4"></i>
+                            <span>Recommended Ubuntu Linux Terminal Commands</span>
+                        </h3>
+                        <button type="button" onclick="copyAllCommands()" id="copyBtn"
+                                class="text-xs font-mono px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 transition">
+                            Copy All
+                        </button>
+                    </div>
+                    <div id="commandsBlock" class="space-y-1.5 font-mono text-xs">
+                        {% for cmd in result.linux_commands_list %}
+                        <div class="flex items-center gap-2 bg-slate-900/90 px-3 py-2 rounded-lg border border-slate-800/90 text-emerald-300">
+                            <span class="text-slate-500 select-none">$</span>
+                            <code class="break-all">{{ cmd }}</code>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <!-- Empty State Guide Card -->
+        <div class="glass-card rounded-2xl p-8 text-center border border-dashed border-slate-700">
+            <div class="w-14 h-14 rounded-2xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center mx-auto mb-4 text-indigo-400">
+                <i data-lucide="bot" class="w-7 h-7"></i>
+            </div>
+            <h3 class="text-lg font-bold text-white">Ready for Cloud Telemetry Analysis</h3>
+            <p class="text-sm text-slate-400 max-w-md mx-auto mt-2">
+                Click any of the <strong>1-Click Cloud Incident Scenarios</strong> above or paste your own Ubuntu/Apache2 server logs on the left, then click <strong>Analyze with CloudMind AI</strong>.
+            </p>
+            <div class="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-3 text-left text-xs">
+                <div class="bg-slate-900/80 p-3.5 rounded-xl border border-slate-800">
+                    <div class="font-bold text-amber-400 mb-1">1. Detect Anomalies</div>
+                    <p class="text-slate-400">Identifies OOM kills, Apache crashes, disk saturation, and SSH attacks.</p>
+                </div>
+                <div class="bg-slate-900/80 p-3.5 rounded-xl border border-slate-800">
+                    <div class="font-bold text-indigo-400 mb-1">2. Scale AWS Resources</div>
+                    <p class="text-slate-400">Advises exact EC2 instance upgrades, EBS volume expansion, and VPC rules.</p>
+                </div>
+                <div class="bg-slate-900/80 p-3.5 rounded-xl border border-slate-800">
+                    <div class="font-bold text-emerald-400 mb-1">3. Execute Linux Fixes</div>
+                    <p class="text-slate-400">Outputs exact Ubuntu CLI commands (<code class="font-mono">systemctl</code>, <code class="font-mono">df -h</code>, <code class="font-mono">sqlite3</code>).</p>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const SCENARIOS = {{ scenarios_json | safe }};
+
+    function loadScenario(key) {
+        const sc = SCENARIOS[key];
+        if (!sc) return;
+        document.getElementById('serverNodeInput').value = sc.server_node;
+        document.getElementById('cpuSlider').value = sc.cpu_pct;
+        document.getElementById('cpuLabel').textContent = sc.cpu_pct + '%';
+        document.getElementById('ramSlider').value = sc.ram_pct;
+        document.getElementById('ramLabel').textContent = sc.ram_pct + '%';
+        document.getElementById('diskSlider').value = sc.disk_pct;
+        document.getElementById('diskLabel').textContent = sc.disk_pct + '%';
+        document.getElementById('logTextarea').value = sc.log_text;
+    }
+
+    function copyAllCommands() {
+        const codes = Array.from(document.querySelectorAll('#commandsBlock code')).map(el => el.textContent);
+        navigator.clipboard.writeText(codes.join('\n')).then(() => {
+            const btn = document.getElementById('copyBtn');
+            btn.textContent = 'Copied!';
+            setTimeout(() => { btn.textContent = 'Copy All'; }, 1800);
+        });
+    }
+</script>
+{% endblock %}

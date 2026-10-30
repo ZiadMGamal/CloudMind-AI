@@ -1,0 +1,370 @@
+{% extends "base.html" %}
+{% block title %}Cluster Dashboard — CloudMind AI on AWS{% endblock %}
+
+{% block content %}
+<!-- Top Hero & Host Telemetry Bar -->
+<div class="glass-card rounded-2xl p-5 sm:p-6 mb-6">
+    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        <div>
+            <div class="flex flex-wrap items-center gap-2.5 mb-2">
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                    {{ host_info.environment_badge }}
+                </span>
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono bg-slate-800 text-slate-300 border border-slate-700">
+                    Host: {{ host_info.hostname }} ({{ host_info.local_ip }})
+                </span>
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+                    SQLite3: {{ stats.db_size_kb }} KB
+                </span>
+            </div>
+            <h1 class="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+                AWS Cloud Cluster & AIOps Telemetry
+            </h1>
+            <p class="text-sm text-slate-400 mt-1">
+                Real-time monitoring across our 3-Node Architecture (<code class="text-amber-300 font-mono">VM1: Server</code>, <code class="text-amber-300 font-mono">VM2: Client</code>, <code class="text-amber-300 font-mono">VM3: Worker</code>) + NFS Shared Storage.
+            </p>
+        </div>
+        <div class="flex flex-wrap items-center gap-3">
+            <button onclick="document.getElementById('hostCliPanel').classList.toggle('hidden')"
+                    class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition">
+                <i data-lucide="terminal" class="w-4 h-4 text-emerald-400"></i>
+                <span>Live Linux Host CLI</span>
+            </button>
+            <a href="{{ url_for('analyzer') }}"
+               class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 shadow-lg shadow-orange-500/20 transition">
+                <i data-lucide="sparkles" class="w-4 h-4"></i>
+                <span>Run New AI Log Scan</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Collapsible Live Ubuntu Linux Host CLI Output (uname -a, free -h, df -h) -->
+    <div id="hostCliPanel" class="hidden mt-5 pt-5 border-t border-slate-800 grid grid-cols-1 lg:grid-cols-3 gap-4 font-mono text-xs">
+        <div class="bg-slate-950/90 rounded-xl p-3.5 border border-slate-800">
+            <div class="text-emerald-400 font-semibold mb-1">$ uname -a</div>
+            <pre class="text-slate-300 whitespace-pre-wrap break-words">{{ host_info.uname }}</pre>
+        </div>
+        <div class="bg-slate-950/90 rounded-xl p-3.5 border border-slate-800">
+            <div class="text-amber-400 font-semibold mb-1">$ free -h</div>
+            <pre class="text-slate-300 whitespace-pre-wrap overflow-x-auto">{{ host_info.free_output }}</pre>
+        </div>
+        <div class="bg-slate-950/90 rounded-xl p-3.5 border border-slate-800">
+            <div class="text-sky-400 font-semibold mb-1">$ df -h /</div>
+            <pre class="text-slate-300 whitespace-pre-wrap overflow-x-auto">{{ host_info.df_output }}</pre>
+        </div>
+    </div>
+</div>
+
+<!-- 4 Summary KPI Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="glass-card rounded-2xl p-5">
+        <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Cloud Cluster VMs</span>
+            <div class="w-9 h-9 rounded-lg bg-sky-500/15 flex items-center justify-center text-sky-400">
+                <i data-lucide="server" class="w-5 h-5"></i>
+            </div>
+        </div>
+        <div class="text-3xl font-extrabold text-white mt-2">{{ nodes|length }} Nodes</div>
+        <p class="text-xs text-slate-400 mt-1">Bridged / AWS VPC Subnet Active</p>
+    </div>
+
+    <div class="glass-card rounded-2xl p-5">
+        <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Total AI Scans</span>
+            <div class="w-9 h-9 rounded-lg bg-indigo-500/15 flex items-center justify-center text-indigo-400">
+                <i data-lucide="brain-circuit" class="w-5 h-5"></i>
+            </div>
+        </div>
+        <div class="text-3xl font-extrabold text-white mt-2">{{ stats.total_reports }}</div>
+        <p class="text-xs text-slate-400 mt-1">Stored in SQLite3 (<code class="font-mono">cloud.db</code>)</p>
+    </div>
+
+    <div class="glass-card rounded-2xl p-5">
+        <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Open Critical Alerts</span>
+            <div class="w-9 h-9 rounded-lg bg-rose-500/15 flex items-center justify-center text-rose-400">
+                <i data-lucide="shield-alert" class="w-5 h-5"></i>
+            </div>
+        </div>
+        <div class="text-3xl font-extrabold {% if stats.critical_open > 0 %}text-rose-400{% else %}text-emerald-400{% endif %} mt-2">
+            {{ stats.critical_open }}
+        </div>
+        <p class="text-xs text-slate-400 mt-1">Requiring AWS Scaling / Remediation</p>
+    </div>
+
+    <div class="glass-card rounded-2xl p-5">
+        <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Avg Anomaly Index</span>
+            <div class="w-9 h-9 rounded-lg bg-amber-500/15 flex items-center justify-center text-amber-400">
+                <i data-lucide="activity" class="w-5 h-5"></i>
+            </div>
+        </div>
+        <div class="text-3xl font-extrabold text-white mt-2">{{ stats.avg_anomaly_score }}<span class="text-base font-normal text-slate-400"> / 100</span></div>
+        <p class="text-xs text-slate-400 mt-1">Multivariate ML Risk Score</p>
+    </div>
+</div>
+
+<!-- 3 Cloud Architecture VM Cards (Server, Client, Worker) -->
+<div class="mb-6">
+    <div class="flex items-center justify-between mb-3">
+        <h2 class="text-lg font-bold text-white flex items-center gap-2">
+            <i data-lucide="network" class="w-5 h-5 text-amber-400"></i>
+            <span>Cloud Virtual Machine Nodes (Ubuntu Cluster)</span>
+        </h2>
+        <span class="text-xs text-slate-400">Click "Simulate Load" on any VM to test live SQLite updates</span>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        {% for node in nodes %}
+        <div class="glass-card rounded-2xl p-5 flex flex-col justify-between hover:border-slate-600 transition">
+            <div>
+                <div class="flex items-start justify-between gap-2 mb-3">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h3 class="font-bold text-base text-white">{{ node.vm_label }}</h3>
+                            <span class="text-xs font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300">{{ node.hostname }}</span>
+                        </div>
+                        <p class="text-xs text-slate-400 mt-1">{{ node.role }}</p>
+                    </div>
+                    <span class="px-2.5 py-1 rounded-full text-xs font-semibold border
+                        {% if node.status == 'Critical' %}bg-rose-500/15 text-rose-300 border-rose-500/30
+                        {% elif node.status == 'Warning' %}bg-amber-500/15 text-amber-300 border-amber-500/30
+                        {% else %}bg-emerald-500/15 text-emerald-300 border-emerald-500/30{% endif %}">
+                        {{ node.status }}
+                    </span>
+                </div>
+
+                <div class="flex items-center justify-between text-xs font-mono text-slate-400 bg-slate-950/60 px-3 py-2 rounded-lg border border-slate-800/80 mb-4">
+                    <span>IP: <strong class="text-slate-200">{{ node.ip_address }}</strong></span>
+                    <span>{{ node.instance_type }}</span>
+                </div>
+
+                <!-- CPU Bar -->
+                <div class="space-y-3 text-xs">
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <span class="text-slate-300 font-medium">CPU Utilization</span>
+                            <span class="font-mono font-semibold text-white">{{ node.cpu_usage }}%</span>
+                        </div>
+                        <div class="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
+                            <div class="h-full rounded-full {% if node.cpu_usage >= 85 %}bg-rose-500{% elif node.cpu_usage >= 65 %}bg-amber-400{% else %}bg-sky-500{% endif %}"
+                                 style="width: {{ node.cpu_usage }}%"></div>
+                        </div>
+                    </div>
+
+                    <!-- RAM Bar -->
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <span class="text-slate-300 font-medium">RAM ({{ node.ram_usage_mb }} / {{ node.ram_total_mb }} MB)</span>
+                            <span class="font-mono font-semibold text-white">{{ node.ram_pct }}%</span>
+                        </div>
+                        <div class="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
+                            <div class="h-full rounded-full {% if node.ram_pct >= 88 %}bg-rose-500{% elif node.ram_pct >= 70 %}bg-amber-400{% else %}bg-indigo-500{% endif %}"
+                                 style="width: {{ [node.ram_pct, 100]|min }}%"></div>
+                        </div>
+                    </div>
+
+                    <!-- Disk Bar -->
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <span class="text-slate-300 font-medium">EBS Disk ({{ node.disk_usage_gb }} / {{ node.disk_total_gb }} GB)</span>
+                            <span class="font-mono font-semibold text-white">{{ node.disk_pct }}%</span>
+                        </div>
+                        <div class="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
+                            <div class="h-full rounded-full {% if node.disk_pct >= 90 %}bg-rose-500{% elif node.disk_pct >= 75 %}bg-amber-400{% else %}bg-emerald-500{% endif %}"
+                                 style="width: {{ [node.disk_pct, 100]|min }}%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-5 pt-3 border-t border-slate-800/80 flex items-center justify-between">
+                <span class="text-[11px] text-slate-500 font-mono">Updated: {{ node.updated_at }}</span>
+                <button type="button"
+                        onclick="openNodeModal({{ node.id }}, '{{ node.vm_label }}', {{ node.cpu_usage }}, {{ node.ram_usage_mb }}, {{ node.ram_total_mb }}, {{ node.disk_usage_gb }}, {{ node.disk_total_gb }})"
+                        class="text-xs font-medium text-indigo-400 hover:text-indigo-300 inline-flex items-center gap-1">
+                    <i data-lucide="sliders" class="w-3.5 h-3.5"></i>
+                    <span>Simulate Load</span>
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- Interactive Charts Section -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-6">
+    <div class="glass-card rounded-2xl p-5 lg:col-span-2">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="font-bold text-base text-white flex items-center gap-2">
+                <i data-lucide="bar-chart-3" class="w-4 h-4 text-sky-400"></i>
+                <span>Cluster Resource Utilization Comparison (%)</span>
+            </h3>
+            <span class="text-xs text-slate-400 font-mono">Live SQLite3 Telemetry</span>
+        </div>
+        <div class="h-64">
+            <canvas id="clusterBarChart"></canvas>
+        </div>
+    </div>
+
+    <div class="glass-card rounded-2xl p-5">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="font-bold text-base text-white flex items-center gap-2">
+                <i data-lucide="pie-chart" class="w-4 h-4 text-amber-400"></i>
+                <span>AI Alert Severity Split</span>
+            </h3>
+        </div>
+        <div class="h-64 flex items-center justify-center">
+            <canvas id="severityDoughnutChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- Recent AI Reports Preview -->
+<div class="glass-card rounded-2xl p-5 sm:p-6">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+        <h2 class="text-lg font-bold text-white flex items-center gap-2">
+            <i data-lucide="file-text" class="w-5 h-5 text-indigo-400"></i>
+            <span>Latest AI Log Diagnostic Reports</span>
+        </h2>
+        <a href="{{ url_for('history') }}" class="text-xs font-semibold text-indigo-400 hover:text-indigo-300 inline-flex items-center gap-1">
+            <span>Open Full SQLite3 Database Explorer</span>
+            <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
+        </a>
+    </div>
+
+    <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse text-sm">
+            <thead>
+                <tr class="border-b border-slate-800 text-xs uppercase text-slate-400">
+                    <th class="py-3 px-3">ID</th>
+                    <th class="py-3 px-3">Target Node</th>
+                    <th class="py-3 px-3">Severity</th>
+                    <th class="py-3 px-3">Anomaly Score</th>
+                    <th class="py-3 px-3">AI Diagnosis Summary</th>
+                    <th class="py-3 px-3">Status</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800/60">
+                {% for r in recent_reports %}
+                <tr class="hover:bg-slate-800/30 transition">
+                    <td class="py-3 px-3 font-mono text-xs text-slate-400">#{{ r.id }}</td>
+                    <td class="py-3 px-3 font-medium text-white whitespace-nowrap">{{ r.server_node }}</td>
+                    <td class="py-3 px-3">
+                        <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold
+                            {% if r.severity == 'Critical' %}bg-rose-500/15 text-rose-300 border border-rose-500/30
+                            {% elif r.severity == 'Medium' %}bg-amber-500/15 text-amber-300 border border-amber-500/30
+                            {% else %}bg-emerald-500/15 text-emerald-300 border border-emerald-500/30{% endif %}">
+                            {{ r.severity }}
+                        </span>
+                    </td>
+                    <td class="py-3 px-3 font-mono text-xs text-slate-200">{{ r.anomaly_score }} / 100</td>
+                    <td class="py-3 px-3 text-slate-300 max-w-md truncate">{{ r.diagnosis }}</td>
+                    <td class="py-3 px-3">
+                        <span class="text-xs font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300">{{ r.resolution_status }}</span>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal: Simulate Load / Update VM Metrics in SQLite -->
+<div id="nodeModal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="glass-card rounded-2xl max-w-md w-full p-6 border border-slate-700 shadow-2xl">
+        <div class="flex items-center justify-between mb-4">
+            <h3 id="modalVmTitle" class="text-lg font-bold text-white">Update VM Telemetry</h3>
+            <button type="button" onclick="document.getElementById('nodeModal').classList.add('hidden')" class="text-slate-400 hover:text-white">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+        <form method="POST" action="{{ url_for('update_node') }}" class="space-y-4">
+            <input type="hidden" name="node_id" id="modalNodeId" />
+            <div>
+                <label class="block text-xs font-semibold text-slate-300 mb-1">CPU Usage (%)</label>
+                <input type="number" step="0.5" min="1" max="100" name="cpu_usage" id="modalCpu" required
+                       class="w-full rounded-xl bg-slate-900 border border-slate-700 px-3.5 py-2 text-sm text-white focus:outline-none focus:border-indigo-500" />
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-slate-300 mb-1">RAM Usage (MB) <span id="modalRamMax" class="text-slate-500"></span></label>
+                <input type="number" min="64" max="8192" name="ram_usage_mb" id="modalRam" required
+                       class="w-full rounded-xl bg-slate-900 border border-slate-700 px-3.5 py-2 text-sm text-white focus:outline-none focus:border-indigo-500" />
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-slate-300 mb-1">Disk Usage (GB) <span id="modalDiskMax" class="text-slate-500"></span></label>
+                <input type="number" step="0.1" min="0.5" max="100" name="disk_usage_gb" id="modalDisk" required
+                       class="w-full rounded-xl bg-slate-900 border border-slate-700 px-3.5 py-2 text-sm text-white focus:outline-none focus:border-indigo-500" />
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button type="button" onclick="document.getElementById('nodeModal').classList.add('hidden')"
+                        class="px-4 py-2 rounded-xl text-sm bg-slate-800 text-slate-300 hover:bg-slate-700">Cancel</button>
+                <button type="submit"
+                        class="px-4 py-2 rounded-xl text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white">Save to SQLite3</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function openNodeModal(id, label, cpu, ram, ramMax, disk, diskMax) {
+        document.getElementById('modalNodeId').value = id;
+        document.getElementById('modalVmTitle').textContent = 'Simulate Telemetry — ' + label;
+        document.getElementById('modalCpu').value = cpu;
+        document.getElementById('modalRam').value = ram;
+        document.getElementById('modalRamMax').textContent = '(Total: ' + ramMax + ' MB)';
+        document.getElementById('modalDisk').value = disk;
+        document.getElementById('modalDiskMax').textContent = '(Total: ' + diskMax + ' GB)';
+        document.getElementById('nodeModal').classList.remove('hidden');
+    }
+
+    const nodeLabels = {{ nodes | map(attribute='vm_label') | list | tojson }};
+    const cpuValues = {{ nodes | map(attribute='cpu_usage') | list | tojson }};
+    const ramValues = {{ nodes | map(attribute='ram_pct') | list | tojson }};
+    const diskValues = {{ nodes | map(attribute='disk_pct') | list | tojson }};
+
+    new Chart(document.getElementById('clusterBarChart'), {
+        type: 'bar',
+        data: {
+            labels: nodeLabels,
+            datasets: [
+                { label: 'CPU %', data: cpuValues, backgroundColor: 'rgba(56, 189, 248, 0.85)', borderRadius: 6 },
+                { label: 'RAM %', data: ramValues, backgroundColor: 'rgba(99, 102, 241, 0.85)', borderRadius: 6 },
+                { label: 'Disk %', data: diskValues, backgroundColor: 'rgba(16, 185, 129, 0.85)', borderRadius: 6 }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: { beginAtZero: true, max: 100, grid: { color: 'rgba(51, 65, 85, 0.35)' }, ticks: { color: '#94a3b8' } },
+                x: { grid: { display: false }, ticks: { color: '#e2e8f0' } }
+            },
+            plugins: { legend: { labels: { color: '#cbd5e1' } } }
+        }
+    });
+
+    const sevCounts = {{ stats.severity_counts | tojson }};
+    new Chart(document.getElementById('severityDoughnutChart'), {
+        type: 'doughnut',
+        data: {
+            labels: ['Critical', 'Medium', 'Low'],
+            datasets: [{
+                data: [sevCounts.Critical || 0, sevCounts.Medium || 0, sevCounts.Low || 0],
+                backgroundColor: ['#f43f5e', '#f59e0b', '#10b981'],
+                borderColor: '#111827',
+                borderWidth: 3
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '66%',
+            plugins: { legend: { position: 'bottom', labels: { color: '#cbd5e1', padding: 16 } } }
+        }
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% block title %}SQLite3 Explorer & Audit History — CloudMind AI{% endblock %}
+
+{% block content %}
+<!-- Header & SQLite3 Database Metadata -->
+<div class="glass-card rounded-2xl p-5 sm:p-6 mb-6">
+    <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div>
+            <div class="flex flex-wrap items-center gap-2 mb-2">
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                    <i data-lucide="database" class="w-3.5 h-3.5"></i>
+                    SQLite3 Connected ({{ stats.db_size_kb }} KB)
+                </span>
+                <span class="text-xs font-mono text-slate-400 bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-800">
+                    {{ stats.total_reports }} Total Records
+                </span>
+            </div>
+            <h1 class="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+                SQLite3 Database Explorer & Incident History
+            </h1>
+            <p class="text-sm text-slate-400 mt-1">
+                Live CRUD interface over <code class="font-mono text-emerald-300">cloud.db</code> (<code class="font-mono">SELECT</code>, <code class="font-mono">INSERT</code>, <code class="font-mono">UPDATE</code>, <code class="font-mono">DELETE</code>).
+            </p>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2.5">
+            <button type="button" onclick="document.getElementById('sqlSchemaBox').classList.toggle('hidden')"
+                    class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition">
+                <i data-lucide="code-2" class="w-4 h-4 text-amber-400"></i>
+                <span>Show SQL Queries</span>
+            </button>
+            <a href="{{ url_for('export_csv') }}"
+               class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition">
+                <i data-lucide="download" class="w-4 h-4 text-sky-400"></i>
+                <span>Export CSV</span>
+            </a>
+            <a href="{{ url_for('export_json') }}"
+               class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition">
+                <i data-lucide="braces" class="w-4 h-4 text-indigo-400"></i>
+                <span>Export JSON</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Collapsible SQL Reference Box (Great for Course Discussion!) -->
+    <div id="sqlSchemaBox" class="hidden mt-5 pt-5 border-t border-slate-800 font-mono text-xs space-y-2">
+        <div class="text-amber-400 font-semibold mb-1"># SQLite3 Terminal Verification Commands (Run on AWS EC2 Ubuntu):</div>
+        <div class="bg-slate-950 p-3.5 rounded-xl border border-slate-800 text-emerald-300 overflow-x-auto space-y-1">
+            <div>$ sqlite3 cloud.db ".tables"</div>
+            <div>$ sqlite3 -header -column cloud.db "SELECT id, server_node, severity, anomaly_score, resolution_status FROM analysis_reports;"</div>
+            <div>$ sqlite3 cloud.db "UPDATE analysis_reports SET resolution_status = 'Resolved' WHERE id = 1;"</div>
+            <div>$ sqlite3 cloud.db "DELETE FROM analysis_reports WHERE id = 3;"</div>
+        </div>
+    </div>
+</div>
+
+<!-- Search & Filter Bar -->
+<form method="GET" action="{{ url_for('history') }}" class="glass-card rounded-2xl p-4 mb-6 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+    <div class="relative flex-1">
+        <input type="text" name="q" value="{{ search_query }}"
+               placeholder="Search by VM node, Apache/Linux log keyword, or diagnosis..."
+               class="w-full rounded-xl bg-slate-900 border border-slate-700 pl-4 pr-4 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500" />
+    </div>
+    <select name="severity"
+            class="rounded-xl bg-slate-900 border border-slate-700 px-3.5 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+        <option value="">All Severities</option>
+        <option value="Critical" {% if severity_filter == 'Critical' %}selected{% endif %}>Critical Only</option>
+        <option value="Medium" {% if severity_filter == 'Medium' %}selected{% endif %}>Medium Only</option>
+        <option value="Low" {% if severity_filter == 'Low' %}selected{% endif %}>Low Only</option>
+    </select>
+    <button type="submit" class="px-4 py-2 rounded-xl text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition">
+        Filter SQL
+    </button>
+    {% if severity_filter or search_query %}
+    <a href="{{ url_for('history') }}" class="px-3 py-2 rounded-xl text-sm text-slate-300 hover:text-white bg-slate-800 text-center">
+        Reset
+    </a>
+    {% endif %}
+</form>
+
+<!-- Reports List -->
+<div class="space-y-4">
+    {% if reports %}
+        {% for r in reports %}
+        <div class="glass-card rounded-2xl p-5 hover:border-slate-600 transition">
+            <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-slate-800/80">
+                <div class="flex flex-wrap items-center gap-2.5">
+                    <span class="font-mono text-xs font-bold px-2.5 py-1 rounded bg-slate-900 border border-slate-700 text-slate-300">
+                        #{{ r.id }}
+                    </span>
+                    <h3 class="font-bold text-base text-white">{{ r.server_node }}</h3>
+                    <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold border
+                        {% if r.severity == 'Critical' %}bg-rose-500/15 text-rose-300 border-rose-500/30
+                        {% elif r.severity == 'Medium' %}bg-amber-500/15 text-amber-300 border-amber-500/30
+                        {% else %}bg-emerald-500/15 text-emerald-300 border-emerald-500/30{% endif %}">
+                        {{ r.severity }} ({{ r.anomaly_score }}/100)
+                    </span>
+                    <span class="text-xs font-mono text-slate-400">
+                        CPU {{ r.cpu_pct }}% • RAM {{ r.ram_pct }}% • Disk {{ r.disk_pct }}%
+                    </span>
+                </div>
+
+                <!-- SQL UPDATE & DELETE Controls -->
+                <div class="flex flex-wrap items-center gap-2">
+                    <span class="text-xs text-slate-500 font-mono mr-1">{{ r.created_at }}</span>
+
+                    <form method="POST" action="{{ url_for('history_update_status', report_id=r.id) }}" class="inline-flex items-center gap-1">
+                        <select name="resolution_status" onchange="this.form.submit()"
+                                class="rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1 text-xs font-medium text-slate-200 focus:outline-none focus:border-indigo-500">
+                            <option value="Open" {% if r.resolution_status == 'Open' %}selected{% endif %}>Open</option>
+                            <option value="In Progress" {% if r.resolution_status == 'In Progress' %}selected{% endif %}>In Progress</option>
+                            <option value="Resolved" {% if r.resolution_status == 'Resolved' %}selected{% endif %}>Resolved</option>
+                        </select>
+                    </form>
+
+                    <button type="button" onclick="document.getElementById('details-{{ r.id }}').classList.toggle('hidden')"
+                            class="px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-700">
+                        Details & CLI
+                    </button>
+
+                    <form method="POST" action="{{ url_for('history_delete', report_id=r.id) }}"
+                          onsubmit="return confirm('Delete Report #{{ r.id }} from SQLite3 database?');">
+                        <button type="submit"
+                                class="px-2.5 py-1 rounded-lg text-xs font-medium bg-rose-500/15 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30">
+                            Delete
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="mt-3 grid grid-cols-1 lg:grid-cols-2 gap-4 text-sm">
+                <div>
+                    <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400">AI Diagnosis</span>
+                    <p class="text-slate-200 mt-0.5">{{ r.diagnosis }}</p>
+                </div>
+                <div>
+                    <span class="text-[11px] font-bold uppercase tracking-wider text-indigo-400">AWS Scaling Recommendation</span>
+                    <p class="text-slate-300 mt-0.5">{{ r.aws_scaling_recommendation }}</p>
+                </div>
+            </div>
+
+            <!-- Expandable Raw Log & Linux Commands -->
+            <div id="details-{{ r.id }}" class="hidden mt-4 pt-4 border-t border-slate-800/80 grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div>
+                    <div class="text-xs font-semibold text-slate-400 mb-1.5">Captured Server Log Snippet:</div>
+                    <pre class="bg-slate-950 rounded-xl p-3 border border-slate-800 font-mono text-xs text-slate-300 whitespace-pre-wrap overflow-x-auto">{{ r.log_snippet }}</pre>
+                </div>
+                <div>
+                    <div class="text-xs font-semibold text-emerald-400 mb-1.5">Ubuntu Remediation Commands:</div>
+                    <div class="bg-slate-950 rounded-xl p-3 border border-slate-800 font-mono text-xs text-emerald-300 space-y-1">
+                        {% for cmd in r.linux_commands_list %}
+                        <div><span class="text-slate-500">$</span> {{ cmd }}</div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="glass-card rounded-2xl p-10 text-center">
+            <p class="text-slate-400 text-sm">No matching AI diagnostic records found in <code class="font-mono">cloud.db</code>.</p>
+            <a href="{{ url_for('analyzer') }}" class="inline-block mt-4 px-4 py-2 rounded-xl text-sm font-semibold bg-indigo-600 text-white">
+                Create New AI Scan
+            </a>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

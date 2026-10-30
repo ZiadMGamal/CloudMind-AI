@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>
+      {% block title %}CloudMind AI — AWS Cloud Resource & Log Analyzer{%
+      endblock %}
+    </title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <script>
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ["Inter", "sans-serif"],
+              mono: ["JetBrains Mono", "monospace"],
+            },
+            colors: {
+              aws: {
+                orange: "#FF9900",
+                navy: "#0B1120",
+                card: "#111827",
+                border: "#1F2937",
+              },
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      body {
+        background: radial-gradient(
+          circle at top right,
+          #172554 0%,
+          #0b1120 42%,
+          #060a13 100%
+        );
+        min-height: 100vh;
+      }
+      .glass-card {
+        background: rgba(17, 24, 39, 0.82);
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(55, 65, 81, 0.55);
+      }
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #0b1120;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #334155;
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #475569;
+      }
+    </style>
+  </head>
+  <body class="text-slate-100 font-sans antialiased flex flex-col min-h-screen">
+    <!-- Top AWS-Inspired Navigation Bar -->
+    <header
+      class="sticky top-0 z-40 border-b border-slate-800/80 bg-slate-950/85 backdrop-blur-md"
+    >
+      <div
+        class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between"
+      >
+        <a
+          href="{{ url_for('dashboard') }}"
+          class="flex items-center gap-3 group"
+        >
+          <div
+            class="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 via-orange-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-orange-500/20"
+          >
+            <i data-lucide="cloud-cog" class="w-6 h-6 text-white"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="font-extrabold text-lg tracking-tight text-white"
+                >CloudMind <span class="text-amber-400">AI</span></span
+              >
+              <span
+                class="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30"
+              >
+                AWS EC2 Ready
+              </span>
+            </div>
+            <p class="text-xs text-slate-400 hidden sm:block">
+              Smart Cloud Resource & Server Log Analyzer
+            </p>
+          </div>
+        </a>
+
+        <!-- Main Nav Links -->
+        <nav class="flex items-center gap-1 sm:gap-2">
+          <a
+            href="{{ url_for('dashboard') }}"
+            class="flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium transition-all {% if active_page == 'dashboard' %}bg-indigo-600 text-white shadow-md shadow-indigo-600/30{% else %}text-slate-300 hover:bg-slate-800/80 hover:text-white{% endif %}"
+          >
+            <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+            <span>Cluster Dashboard</span>
+          </a>
+          <a
+            href="{{ url_for('analyzer') }}"
+            class="flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium transition-all {% if active_page == 'analyzer' %}bg-indigo-600 text-white shadow-md shadow-indigo-600/30{% else %}text-slate-300 hover:bg-slate-800/80 hover:text-white{% endif %}"
+          >
+            <i data-lucide="sparkles" class="w-4 h-4 text-amber-400"></i>
+            <span>AI Log Analyzer</span>
+          </a>
+          <a
+            href="{{ url_for('history') }}"
+            class="flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium transition-all {% if active_page == 'history' %}bg-indigo-600 text-white shadow-md shadow-indigo-600/30{% else %}text-slate-300 hover:bg-slate-800/80 hover:text-white{% endif %}"
+          >
+            <i data-lucide="database" class="w-4 h-4 text-emerald-400"></i>
+            <span>SQLite3 Explorer</span>
+          </a>
+        </nav>
+      </div>
+    </header>
+
+    <!-- Flash Toast Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %} {% if
+    messages %}
+    <div class="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 mt-4 space-y-2">
+      {% for category, message in messages %}
+      <div
+        class="flex items-center justify-between px-4 py-3 rounded-xl border text-sm font-medium {% if category == 'error' %}bg-rose-500/15 border-rose-500/40 text-rose-200{% else %}bg-emerald-500/15 border-emerald-500/40 text-emerald-200{% endif %}"
+      >
+        <div class="flex items-center gap-2.5">
+          <i
+            data-lucide="{% if category == 'error' %}alert-triangle{% else %}check-circle-2{% endif %}"
+            class="w-4 h-4 shrink-0"
+          ></i>
+          <span>{{ message }}</span>
+        </div>
+        <button
+          onclick="this.parentElement.remove()"
+          class="text-slate-400 hover:text-white"
+        >
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %} {% endwith %}
+
+    <!-- Main Content Container -->
+    <main
+      class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8"
+    >
+      {% block content %}{% endblock %}
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-slate-800/80 bg-slate-950/60 mt-12">
+      <div
+        class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-400"
+      >
+        <div class="flex items-center gap-2">
+          <span
+            class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"
+          ></span>
+          <span><strong>CloudMind AI</strong></span>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 font-mono text-[11px]">
+          <span class="px-2 py-0.5 rounded bg-slate-900 border border-slate-800"
+            >AWS EC2</span
+          >
+          <span class="px-2 py-0.5 rounded bg-slate-900 border border-slate-800"
+            >Ubuntu Linux</span
+          >
+          <span class="px-2 py-0.5 rounded bg-slate-900 border border-slate-800"
+            >Apache2</span
+          >
+          <span class="px-2 py-0.5 rounded bg-slate-900 border border-slate-800"
+            >Python Flask</span
+          >
+          <span class="px-2 py-0.5 rounded bg-slate-900 border border-slate-800"
+            >SQLite3 (cloud.db)</span
+          >
+          <span class="px-2 py-0.5 rounded bg-slate-900 border border-slate-800"
+            >AIOps Engine</span
+          >
+        </div>
+      </div>
+    </footer>
+
+    <script>
+      lucide.createIcons();
+    </script>
+    {% block scripts %}{% endblock %}
+  </body>
+</html>
